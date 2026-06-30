@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.pids
+*.log
+.DS_Store
+backend/node_modules/
+renderer/node_modules/
+main/node_modules/
+renderer/dist/
