@@ -4,6 +4,11 @@ set -e
 PIDFILE=".pids"
 > "$PIDFILE"
 
+# Load .env if it exists
+if [ -f .env ]; then
+  set -a && source .env && set +a
+fi
+
 cleanup() {
   echo "==> Shutting down..."
   bash "$(dirname "$0")/stop.sh"
