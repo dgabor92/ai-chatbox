@@ -12,8 +12,9 @@ if [ -f "$PIDFILE" ]; then
   rm -f "$PIDFILE"
 fi
 
-# Fallback: kill any lingering Electron and node dev servers
+# Fallback: kill any lingering processes
 pkill -f "electron ." 2>/dev/null || true
 pkill -f "vite" 2>/dev/null || true
+pkill -f "stt_server.py" 2>/dev/null || true
 
 echo "==> All processes stopped."

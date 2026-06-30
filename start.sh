@@ -10,12 +10,13 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+echo "==> Starting Python STT server (ports 8766/8765)..."
+python3 stt_server.py &
+echo $! >> "$PIDFILE"
+sleep 2
+
 echo "==> Starting backend (port 5001)..."
 npm run dev --prefix backend &
-echo $! >> "$PIDFILE"
-
-echo "==> Starting LLM proxy (main)..."
-npm run dev --prefix main &
 echo $! >> "$PIDFILE"
 
 echo "==> Starting renderer (Vite, port 5173)..."
