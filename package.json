@@ -1,5 +1,5 @@
 {
-  "name": "ai_chatbox_launcher",
+  "name": "interview-assistant",
   "private": true,
   "main": "electron.js",
   "scripts": {
