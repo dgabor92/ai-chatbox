@@ -3,17 +3,13 @@ export interface ElectronAPI {
   onReply: (callback: (data: string) => void) => void;
   setOpacity: (value: number) => void;
   startCapture: () => Promise<string | null>;
-  // Implemented by Jack (globalShortcut + IPC)
-  onAskAI?: (callback: () => void) => void;
-  onStartCrop?: (callback: () => void) => void;
-  sendCropResult?: (base64: string, bounds: CropBounds) => void;
-}
-
-export interface CropBounds {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
+  audioStart: () => void;
+  audioStop: () => void;
+  sendAudioChunk: (chunkBase64: string) => void;
+  onAudioRecordingStarted: (callback: () => void) => void;
+  onAudioRecordingStopped: (callback: () => void) => void;
+  onShortcutSnip: (callback: () => void) => void;
+  onShortcutAiTrigger: (callback: () => void) => void;
 }
 
 declare global {

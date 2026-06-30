@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 export function useAiOverlay() {
   const [response, setResponse] = useState('');
+  const [responses, setResponses] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [visible, setVisible] = useState(false);
 
@@ -18,15 +19,11 @@ export function useAiOverlay() {
 
     window.electronAPI.onReply((data) => {
       setResponse(data);
+      setResponses((prev) => [...prev, data]);
       setLoading(false);
-      setVisible(true);
-    });
-
-    // Jack implements the Cmd+K globalShortcut → ipcMain → renderer IPC bridge
-    window.electronAPI.onAskAI?.(() => {
       setVisible(true);
     });
   }, []);
 
-  return { response, loading, visible, setVisible, ask };
+  return { response, responses, loading, visible, setVisible, ask };
 }

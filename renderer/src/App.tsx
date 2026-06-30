@@ -1,65 +1,99 @@
-import { useState } from 'react';
-import { HelpCircle, Download } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { Mic, MicOff, Sparkles, Send } from 'lucide-react';
 import { useTranscript } from './hooks/useTranscript';
 import { useAiOverlay } from './hooks/useAiOverlay';
-import { useCropOverlay } from './hooks/useCropOverlay';
+import { useAudioRecorder } from './hooks/useAudioRecorder';
 import { TranscriptPanel } from './components/TranscriptPanel';
-import { AiOverlay } from './components/AiOverlay';
-import { CropOverlay } from './components/CropOverlay';
-import { HotkeyModal } from './components/HotkeyModal';
-
-function exportMarkdown(interviewer: { text: string }[], candidate: { text: string }[]) {
-  const date = new Date().toISOString().slice(0, 10);
-  const lines = [
-    `# Interview Transcript — ${date}`,
-    '',
-    '## Interviewer',
-    '',
-    ...interviewer.map((e) => `- ${e.text}`),
-    '',
-    '## Candidate',
-    '',
-    ...candidate.map((e) => `- ${e.text}`),
-  ];
-  const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `interview-${date}.md`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+import { HotkeyHelp } from './components/HotkeyHelp';
+import { ExportButton } from './components/ExportButton';
 
 function App() {
-  const [hotkeyOpen, setHotkeyOpen] = useState(false);
+  const [aiInput, setAiInput] = useState('');
+  const aiInputRef = useRef<HTMLTextAreaElement>(null);
 
   const interviewerEntries = useTranscript('Speaker 1');
   const candidateEntries = useTranscript('Speaker 2');
   const ai = useAiOverlay();
-  const crop = useCropOverlay();
+  const audio = useAudioRecorder();
+
+  // Auto question detection: new Speaker 1 entry with "?" → ask AI
+  const prevInterviewerLenRef = useRef(0);
+  useEffect(() => {
+    const newEntries = interviewerEntries.slice(prevInterviewerLenRef.current);
+    prevInterviewerLenRef.current = interviewerEntries.length;
+    for (const entry of newEntries) {
+      if (entry.text.includes('?')) {
+        ai.ask(entry.text);
+        break;
+      }
+    }
+  }, [interviewerEntries]);
+
+  // Cmd+K: focus AI input
+  useEffect(() => {
+    window.electronAPI?.onShortcutAiTrigger(() => {
+      aiInputRef.current?.focus();
+    });
+  }, []);
+
+  // Cmd+Shift+S: capture → ask AI
+  useEffect(() => {
+    window.electronAPI?.onShortcutSnip(async () => {
+      const base64 = await window.electronAPI?.startCapture();
+      if (base64) {
+        ai.ask(`Elemezd ezt a képernyőképet: ${base64}`);
+      }
+    });
+  }, []);
+
+  const handleAiSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiInput.trim()) return;
+    ai.ask(aiInput);
+    setAiInput('');
+  };
+
+  const toggleRecording = () => {
+    if (audio.isRecording) {
+      audio.stop();
+    } else {
+      audio.start();
+    }
+  };
 
   return (
-    <div className="h-screen flex flex-col bg-zinc-950 text-zinc-100 font-sans overflow-hidden">
+    <div className="h-screen flex flex-col bg-gray-900 text-white overflow-hidden font-sans">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2.5 bg-zinc-900 border-b border-zinc-800 drag shrink-0">
-        <h1 className="text-sm font-semibold text-zinc-100 tracking-wide">
-          Interview Assistant
-        </h1>
-        <div className="flex items-center gap-3 no-drag">
+      <header className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700 shrink-0 drag">
+        <h1 className="text-sm font-semibold text-white tracking-wide">Interview Assistant</h1>
+        <div className="flex items-center gap-2 no-drag">
           <button
-            onClick={() => exportMarkdown(interviewerEntries, candidateEntries)}
-            className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-100 transition-colors px-2 py-1 rounded hover:bg-zinc-800"
+            onClick={toggleRecording}
+            className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg transition-colors font-medium ${
+              audio.isRecording
+                ? 'bg-red-600 hover:bg-red-500 text-white'
+                : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+            }`}
           >
-            <Download size={13} />
-            Export MD
+            {audio.isRecording ? <MicOff size={13} /> : <Mic size={13} />}
+            {audio.isRecording ? 'Stop' : 'R'}
           </button>
-          <button
-            onClick={() => setHotkeyOpen((o) => !o)}
-            className="text-zinc-400 hover:text-zinc-100 transition-colors p-1 rounded hover:bg-zinc-800"
-            aria-label="Gyorsbillentyűk"
-          >
-            <HelpCircle size={16} />
-          </button>
+          <input
+            type="range"
+            min="0.2"
+            max="1"
+            step="0.05"
+            defaultValue="1"
+            className="w-20 accent-indigo-500"
+            onChange={(e) => window.electronAPI?.setOpacity(parseFloat(e.target.value))}
+          />
+          <ExportButton
+            interviewer={interviewerEntries}
+            candidate={candidateEntries}
+            aiResponses={ai.responses}
+          />
+          <HotkeyHelp />
         </div>
       </header>
 
@@ -68,7 +102,7 @@ function App() {
         {/* Interviewer transcript */}
         <div className="flex-1 min-w-0">
           <TranscriptPanel
-            label="Interviewer (Speaker 1)"
+            label="Interjúztató (Speaker 1)"
             entries={interviewerEntries}
             colorClass="text-sky-300"
           />
@@ -77,34 +111,63 @@ function App() {
         {/* Candidate transcript */}
         <div className="flex-1 min-w-0">
           <TranscriptPanel
-            label="Candidate (Speaker 2)"
+            label="Jelölt (Speaker 2)"
             entries={candidateEntries}
             colorClass="text-emerald-300"
           />
         </div>
 
-        {/* AI overlay panel */}
-        <div className="w-72 shrink-0">
-          {ai.visible ? (
-            <AiOverlay
-              response={ai.response}
-              loading={ai.loading}
-              visible={ai.visible}
-              onClose={() => ai.setVisible(false)}
-              onAsk={ai.ask}
+        {/* AI panel */}
+        <div className="w-72 shrink-0 flex flex-col bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2 bg-gray-700 border-b border-gray-600 shrink-0">
+            <Sparkles size={13} className="text-indigo-400" />
+            <span className="text-sm font-semibold text-indigo-300">AI segítség</span>
+            <span className="text-gray-500 text-xs ml-auto">Cmd+K</span>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 py-3">
+            {ai.loading ? (
+              <div className="flex items-center gap-1.5 text-gray-400 text-sm">
+                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse [animation-delay:150ms]" />
+                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse [animation-delay:300ms]" />
+              </div>
+            ) : ai.response ? (
+              <div className="prose prose-invert prose-sm max-w-none text-gray-200">
+                <ReactMarkdown>{ai.response}</ReactMarkdown>
+              </div>
+            ) : (
+              <p className="text-gray-500 text-sm italic">
+                Automatikusan aktiválódik ha kérdést detektál, vagy Cmd+K...
+              </p>
+            )}
+          </div>
+
+          <form onSubmit={handleAiSubmit} className="flex flex-col gap-2 p-3 border-t border-gray-700 shrink-0 no-drag">
+            <textarea
+              ref={aiInputRef}
+              value={aiInput}
+              onChange={(e) => setAiInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleAiSubmit(e);
+                }
+              }}
+              placeholder="Kérdés az AI-nak... (Enter küld)"
+              rows={3}
+              className="w-full bg-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2 outline-none border border-gray-600 focus:border-indigo-500 transition-colors placeholder:text-gray-500 resize-none"
             />
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-700 text-zinc-600 text-sm gap-2">
-              <span>AI panel</span>
-              <span className="text-xs">Cmd+K</span>
-            </div>
-          )}
+            <button
+              type="submit"
+              className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg py-1.5 transition-colors"
+            >
+              <Send size={13} />
+              Küldés
+            </button>
+          </form>
         </div>
       </main>
-
-      {/* Overlays */}
-      <CropOverlay {...crop} />
-      <HotkeyModal open={hotkeyOpen} onClose={() => setHotkeyOpen(false)} />
     </div>
   );
 }
